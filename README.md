@@ -10,6 +10,8 @@ Warning: This is a work in progress, use at your own risk. Currently only suppor
 5. For the first time, an authentication window will open. Log in to Spotify and allow the app to access your account.
 6. An icon should be in your system tray. Right click it to open UI.
 
+# Demo
+![Demo](assets/demo.gif)
 
 # Development
 TODO:
