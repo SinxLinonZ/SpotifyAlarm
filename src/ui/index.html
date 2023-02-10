@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Alarm</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.2/dist/semantic.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.2/dist/semantic.min.js"></script>
+
+    <!-- <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script> -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/mitt/dist/mitt.umd.js"></script>
+
+</head>
+
+<body>
+
+    <div id="app">
+        <!-- <test :prop="someData" /> -->
+
+        <!-- 闹钟列表
+         -->
+        <div class="ui grid" style="padding: 3em">
+            <template v-for="alarm in alarms">
+                <alarm-card :alarm-id="alarm.Id" :alarm-name="alarm.Name" :alarm-time="alarm.TrigTime"
+                    :alarm-tracks="alarm.Tracks" :alarm-volume="alarm.Volume"
+                    :alarm-playback-device="alarm.Device.DisplayName" :alarm-enabled="alarm.Enabled" />
+            </template>
+
+        </div>
+
+        <!-- 添加闹钟按钮
+         -->
+        <button id="btn_addAlarm" class="circular ui icon button massive">
+            <i class="icon plus"></i>
+        </button>
+
+        <!-- 添加闹钟弹窗
+         -->
+        <new-alarm-modal />
+    </div>
+
+
+    <script>
+        const alarmCard = {
+            template: `
+            <div class="four wide computer eight wide tablet sixteen wide mobile column">
+                <div class="ui segment" style="color: #191414;">
+
+                    <i class="huge clock outline icon"></i>
+                    <span class="alarmName">{{ this._alarmName }}</span>
+
+                    <div class="alarmDetail">
+                        <div>
+                            <p class="alarmTime">{{ parseTime(this._alarmTime) }}</p>
+                        </div>
+
+                        <div style="text-align: right;">
+                            <span class="">{{ this._alarmTracks[0].DisplayName }}</span>
+                            <!-- <i class="music icon"></i> -->
+                            <i class="spotify icon"></i>
+                            <br>
+                            <span class="">{{ this._alarmVolume }}</span>
+                            <i class="volume down icon"></i>
+                            <br>
+                            <span class="">{{ this._alarmPlaybackDevice }}</span>
+                            <i class="desktop icon"></i>
+                        </div>
+                    </div>
+
+                    <div class="ui divider"></div>
+
+                    <div class="alarmActions">
+                        <button class="ui tertiary button">
+                            Edit
+                        </button>
+
+                        <div style="text-align: right;">
+                            <div :id="'slider_' + this._alarmId" class="ui slider right aligned checkbox" @click="switchAlarm">
+                                <input type="checkbox" tabindex="0" class="hidden" :checked="this._alarmEnabled">
+                                <label>{{ this._alarmEnabled ? "ON" : "OFF" }}</label>
+                            </div>
+                            <label></label>
+                        </div>
+                    </div>
+
+                    </div>
+                </div>
+            `,
+            props: ['alarmId', 'alarmName', 'alarmTime', 'alarmTracks', 'alarmVolume', 'alarmPlaybackDevice', 'alarmEnabled'],
+            data() {
+                return {
+                    _alarmId: this.alarmId,
+                    _alarmName: this.alarmName,
+                    _alarmTime: this.alarmTime,
+                    _alarmTracks: this.alarmTracks,
+                    _alarmVolume: this.alarmVolume,
+                    _alarmPlaybackDevice: this.alarmPlaybackDevice,
+                    _alarmEnabled: this.alarmEnabled,
+                }
+            },
+            methods: {
+                switchAlarm: function () {
+                    const self = this;
+                    if ($('#slider_' + this._alarmId).hasClass('disabled')) {
+                        return;
+                    }
+
+                    this._alarmEnabled = !this._alarmEnabled;
+                    $('#slider_' + this._alarmId).addClass('disabled');
+
+                    $.ajax({
+                        url: "http://localhost:13333/api/alarm/switch",
+                        type: "PUT",
+                        data: {
+                            Id: this._alarmId,
+                            Enabled: this._alarmEnabled
+                        },
+                        success: function (data) {
+                            console.log(data);
+                            $('#slider_' + self._alarmId).removeClass('disabled');
+                        },
+                        error: function (xhr, status, error) {
+                            console.log(xhr.responseText);
+                            $('#slider_' + self._alarmId).removeClass('disabled');
+                        }
+                    });
+
+                },
+                parseTime: function (alarmTime) {
+                    let hour = alarmTime.Hour;
+                    let minute = alarmTime.Minute;
+
+                    if (hour < 10) {
+                        hour = "0" + hour;
+                    }
+                    if (minute < 10) {
+                        minute = "0" + minute;
+                    }
+
+                    return hour + ":" + minute;
+                }
+            },
+        }
+
+        const newAlarmModal = {
+            template: `
+            <div class="ui modal" id="modal_addAlarm">
+                <div class="header">
+                    <i class="icon clock"></i>
+                    Create new alarm
+                </div>
+
+                <div class="content" style="color: #191414;">
+                    <div class="ui form">
+
+                        <div class="three fields">
+                            <div class="field">
+                                <label>Alarm name</label>
+                                <input type="text" placeholder="Alarm name" id="newAlarm_alarmName" v-model="this.Name">
+                            </div>
+
+                            <div class="field">
+                                <label>Playback device</label>
+                                <div class="ui selection dropdown" id="selection_playbackDevice">
+                                    <i class="dropdown icon"></i>
+                                    <div class="default text">Playback device</div>
+                                    <div class="menu" id="deviceListContainer">
+                                        <div v-for="device in this._devices" class="item" :data-value="device.id">{{ device.name }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label>Playback volume: <span id="display_playbackVolume">{{ this.Volume }}</span></label>
+                                <div class="ui slider" id="slider_playbackVolume"></div>
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label>Playback track</label>
+                            <div class="ui segments">
+                                
+                                <div v-for="track in this.Tracks" class="ui segment">
+                                    <p>{{ track.DisplayName }}</p>
+                                </div>
+                                
+                            </div>
+                            <input type="text" id="newAlarm_playbackTrack" placeholder="Playback track url..." @keydown="addTrack">
+                            
+                        </div>
+
+                        <div class="ui grid">
+                            <div class="eight wide column">
+                                <label>Alarm at:</label>
+                                <div class="fields">
+                                    <div class="field">
+                                        <label>Hour</label>
+                                        <input type="number" placeholder="HH" id="newAlarm_Hour" v-model="this.TrigTime.Hour">
+                                    </div>
+                                    <div class="field">
+                                        <label>Minute</label>
+                                        <input type="number" placeholder="MM" id="newAlarm_Minute" v-model="this.TrigTime.Minute">
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <div class="eight wide column">
+                                <label>Playback options:</label>
+                                <div class="fields">
+                                    <div class="field">
+                                        <label>From position:</label>
+                                        <input type="text" placeholder="MM:SS" id="newAlarm_playbackPosition" disabled>
+                                    </div>
+                                    <div class="field">
+                                        <label>Random order:</label>
+                                        <div class="ui slider right aligned checkbox disabled" id="newAlarm_opt_randomOrder">
+                                            <input type="checkbox" tabindex="0" class="hidden">
+                                            <label>XX</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="ui red deny right labeled icon button">
+                        Cancel
+                        <i class="times icon"></i>
+                    </button>
+                    <button id="newAlarm_submit" class="ui green right labeled icon button" 
+                        :class="{disabled: !AddButtonAvailable}" @click="submitNewAlarm">
+                        Yep, add it!
+                        <i class="checkmark icon"></i>
+                    </button>
+                </div>
+            </div>
+            `,
+            data() {
+                return {
+                    Id: '',
+                    Name: '',
+                    Device: {},
+                    Volume: 80,
+                    Tracks: [],
+                    TrigTime: {
+                        Hour: "",
+                        Minute: "",
+                    },
+
+                    _devices: [],
+                    _processing: false,
+                    _tracks: [],
+                }
+            },
+            computed: {
+                AddButtonAvailable: function() {
+                    return this.Id &&
+                        this.Name &&
+                        this.Device.DisplayName &&
+                        this.TrigTime.Hour &&
+                        this.TrigTime.Minute &&
+                        this.Tracks.length > 0 &&
+                        !this._processing;
+                },
+
+            },
+            mounted() {
+                // 初始化设备列表
+                let self = this;
+                $.ajax({
+                    url: 'http://localhost:13333/api/deviceList',
+                    type: 'GET',
+                    success: function (data) {
+                        let deviceList = JSON.parse(data);
+                        self._devices = deviceList;
+                    },
+                    error: function (data) {
+                        console.log(data);
+                    }
+                });
+
+
+                // 生成随机闹钟Id
+                this.Id = Math.random().toString(36).substr(2);
+                // 打开添加闹钟弹窗
+                $('#btn_addAlarm').click(function () {
+                    // 刷新闹钟Id
+                    self.Id = Math.random().toString(36).substr(2);
+                    // 刷新设备列表
+                    $.ajax({
+                        url: 'http://localhost:13333/api/deviceList',
+                        type: 'GET',
+                        success: function (data) {
+                            let deviceList = JSON.parse(data);
+                            self._devices = deviceList;
+                        },
+                        error: function (data) {
+                            console.log(data);
+                        }
+                    });
+
+                    $('#modal_addAlarm').modal('show');
+                });
+
+                // 初始化滑动条
+                $('#slider_playbackVolume').slider({
+                    min: 0,
+                    max: 100,
+                    start: 80,
+                    step: 5,
+                    onMove: function (value) {
+                        self.Volume = value;
+                    }
+                });
+
+                // 初始化下拉菜单
+                $('#selection_playbackDevice').dropdown({
+                    onChange: function (value, text, $selectedItem) {
+                        self.Device = {
+                            Id: value,
+                            DisplayName: text
+                        };
+                    }
+                });
+
+                // 初始化复选框
+                $('#newAlarm_opt_randomOrder').checkbox();
+
+                // 时间输入框优化
+                {
+                    $('#newAlarm_Hour').on('beforeinput', function (e) {
+                        e.preventDefault();
+
+                        // is backspace
+                        if (e.originalEvent.inputType == 'deleteContentBackward') {
+                            $(this).val($(this).val().slice(0, -1));
+                            return;
+                        }
+
+                        // match digit
+                        const key = e.originalEvent.data;
+                        if (!key.match(/\d/)) {
+                            return;
+                        }
+
+                        if ($(this).val().length == 2) {
+                            return;
+                        }
+
+                        $('#newAlarm_Hour').val($('#newAlarm_Hour').val() + key);
+
+                        if ($(this).val().length == 2) {
+                            if ($(this).val() > 23) {
+                                $(this).val(23);
+                            }
+                            if ($(this).val() < 0) {
+                                $(this).val("00");
+                            }
+
+                            $('#newAlarm_Minute').focus();
+                        }
+                    });
+                    $('#newAlarm_Hour').on('input', function (e) {
+                        e.preventDefault();
+                        if ($(this).val().length == 1) {
+                            $(this).val('0' + $(this).val())
+                        }
+
+                        if ($(this).val().length == 2) {
+                            if ($(this).val() > 23) {
+                                $(this).val(23);
+                            }
+                            if ($(this).val() < 0) {
+                                $(this).val("00");
+                            }
+                        }
+                    });
+                    $('#newAlarm_Hour').on('blur', function (e) {
+                        e.preventDefault();
+                        if ($(this).val().length == 1) {
+                            $(this).val('0' + $(this).val())
+                        }
+
+                        if ($(this).val().length == 2) {
+                            if ($(this).val() > 23) {
+                                $(this).val(23);
+                            }
+                            if ($(this).val() < 0) {
+                                $(this).val("00");
+                            }
+                        }
+
+                        self.TrigTime.Hour = $(this).val();
+                    });
+                }
+                {
+                    $('#newAlarm_Minute').on('beforeinput', function (e) {
+                        e.preventDefault();
+
+                        // is backspace
+                        if (e.originalEvent.inputType == 'deleteContentBackward') {
+                            $(this).val($(this).val().slice(0, -1));
+                            return;
+                        }
+
+
+                        // match digit
+                        const key = e.originalEvent.data;
+                        if (!key.match(/\d/)) {
+                            return;
+                        }
+
+                        if ($(this).val().length == 2) {
+                            return;
+                        }
+
+                        $('#newAlarm_Minute').val($('#newAlarm_Minute').val() + key);
+
+                        if ($(this).val().length == 2) {
+                            if ($(this).val() > 59) {
+                                $(this).val("59");
+                            }
+                            if ($(this).val() < 0) {
+                                $(this).val("00");
+                            }
+
+                            $('#newAlarm_Minute').focus();
+                        }
+                    });
+                    $('#newAlarm_Minute').on('input', function (e) {
+                        e.preventDefault();
+                        if ($(this).val().length == 1) {
+                            $(this).val('0' + $(this).val())
+                        }
+
+                        if ($(this).val().length == 2) {
+                            if ($(this).val() > 59) {
+                                $(this).val(59);
+                            }
+                            if ($(this).val() < 0) {
+                                $(this).val("00");
+                            }
+                        }
+                    });
+                    $('#newAlarm_Minute').on('blur', function (e) {
+                        e.preventDefault();
+                        if ($(this).val().length == 1) {
+                            $(this).val('0' + $(this).val())
+                        }
+
+                        if ($(this).val().length == 2) {
+                            if ($(this).val() > 59) {
+                                $(this).val(59);
+                            }
+                            if ($(this).val() < 0) {
+                                $(this).val("00");
+                            }
+                        }
+
+                        self.TrigTime.Minute = $(this).val();
+                    });
+                }
+            },
+            methods: {
+                addTrack: async function (event) {
+                    const key = event.key;
+
+                    // is enter
+                    if (key == 'Enter') {
+                        if ($('#newAlarm_playbackTrack').val() == '') {
+                            return;
+                        }
+
+                        const input = $('#newAlarm_playbackTrack').val();
+                        $('#newAlarm_playbackTrack').val('');
+
+                        $('#newAlarm_playbackTrack').attr('disabled', true);
+                        this._processing = true;
+
+                        const self = this;
+
+                        // Get track info
+                        const URI = await (new Promise((resolve, reject) => {
+                            $.ajax({
+                                url: 'http://localhost:13333/api/url/toURI',
+                                type: 'GET',
+                                data: {
+                                    url: input
+                                },
+                                success: function (data) {
+                                    const _URI = data;
+                                    if (_URI == "invalid url") {
+                                        resolve({
+                                            ok: false,
+                                            data: null
+                                        });
+                                    } else {
+                                        resolve({
+                                            ok: true,
+                                            data: _URI
+                                        });
+                                    }
+
+                                },
+                                error: function (data) {
+                                    console.log(data);
+                                    reject();
+                                }
+                            });
+                        }));
+
+                        if (!URI.ok) return;
+
+                        const trackInfo = await (new Promise((resolve, reject) => {
+                            $.ajax({
+                                url: 'http://localhost:13333/api/uri/query',
+                                type: 'GET',
+                                data: {
+                                    uri: URI.data
+                                },
+                                success: function (data) {
+                                    resolve(JSON.parse(data));
+                                },
+                                error: function (data) {
+                                    console.log(data);
+                                    reject();
+                                }
+                            });
+                        }));
+
+                        this.Tracks.push({
+                            URI: URI.data,
+                            DisplayName: trackInfo.name,
+                            Id: trackInfo.id,
+                        });
+
+                        $('#newAlarm_playbackTrack').attr('disabled', false);
+                        this._processing = false;
+                    }
+                },
+                submitNewAlarm: function () {
+                    if ($('#newAlarm_submit').hasClass('disabled')) {
+                        return;
+                    }
+
+                    let self = this;
+
+                    $.ajax({
+                        url: 'http://localhost:13333/api/alarm/add',
+                        type: 'POST',
+
+                        data: {
+                            Id: self.Id,
+                            Name: self.Name,
+                            Device: self.Device,
+                            Volume: self.Volume,
+                            // Tracks: self.Tracks,
+                            Tracks: JSON.stringify(self.Tracks),
+                            TrigTime: self.TrigTime,
+                        },
+                        success: function (data) {
+                            self.Id = Math.random().toString(36).substr(2);
+                            self.Name = '';
+                            self.Device = {};
+                            self.Volume = 80;
+                            self.Tracks = [];
+                            self.TrigTime = {
+                                Hour: '',
+                                Minute: '',
+                            };
+
+                            self.emitter.emit('fireRefreshAlarmList', {})
+                            console.log(`Add alarm: ${data}`);
+                            $('#modal_addAlarm').modal('hide');
+                        },
+                        error: function (data) {
+                            console.log(data);
+                        }
+                    });
+                },
+            }
+        }
+
+        const emitter = mitt()
+        const app = Vue.createApp({
+            data: () => ({
+                alarms: []
+            }),
+
+            methods: {
+                refreshAlarmList: function () {
+                    let self = this;
+
+                    self.alarms = [];
+                    $.ajax({
+                        url: 'http://localhost:13333/api/alarmList',
+                        type: 'GET',
+                        success: function (data) {
+                            self.alarms = JSON.parse(data);
+                        },
+                        error: function (data) {
+                            console.log(data);
+                        }
+                    });
+                },
+            },
+
+            mounted() {
+                // 初始化闹钟列表
+                let self = this;
+                this.refreshAlarmList();
+
+                // 定期刷新闹钟列表
+                setInterval(this.refreshAlarmList, 1000 * 60);
+            },
+
+            created() {
+                this.emitter.on('fireRefreshAlarmList', this.refreshAlarmList)
+            },
+        })
+        app.component('new-alarm-modal', newAlarmModal)
+        app.component('alarm-card', alarmCard)
+        app.config.globalProperties.emitter = emitter
+        app.mount('#app')
+    </script>
+
+    <style>
+        body {
+            background-color: #191414;
+            color: #FFF;
+        }
+
+        #btn_addAlarm {
+            background-color: #1DB954;
+            color: #FFF;
+            position: fixed;
+            right: 1em;
+            bottom: 1em;
+        }
+
+        .alarmName {
+            font-size: 1.5em;
+            font-weight: 700;
+        }
+
+        .alarmTime {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 0;
+            /* text-align: center; */
+        }
+
+        .alarmDetail {
+            display: grid;
+            grid-template-rows: auto;
+            grid-template-columns: 1fr 1fr;
+            align-items: center;
+        }
+
+        .alarmActions {
+            display: grid;
+            grid-template-rows: auto;
+            grid-template-columns: 1fr 2fr;
+            align-items: center;
+        }
+    </style>
+
+
+
+
+    <script>
+        $(document).ready(function () {
+        });
+    </script>
+
+</body>
+
+</html>
