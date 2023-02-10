@@ -2,3 +2,5 @@ config.yaml
 token.json
 *.old
 alarms.json
+output/
+*.mp4

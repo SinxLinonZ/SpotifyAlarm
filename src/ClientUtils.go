@@ -18,9 +18,9 @@ import (
 )
 
 type AppSetting struct {
-	RedirectURL  string
-	ClientId     string
-	ClientSecret string
+	RedirectURL  string `yaml:"RedirectURL"`
+	ClientId     string `yaml:"ClientId"`
+	ClientSecret string `yaml:"ClientSecret"`
 }
 
 func getClient() *spotify.Client {
